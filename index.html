@@ -40,26 +40,25 @@
             background: linear-gradient(90deg, transparent, #e82127, transparent);
             margin: 30px 0; animation: expandLine 2s ease 1s both;
         }
-        .start-btn {
+        .countdown {
             font-family: 'Orbitron', sans-serif;
-            font-size: 0.85rem; letter-spacing: 0.4em;
-            color: #fff; background: transparent;
-            border: 1px solid rgba(255,255,255,0.2);
-            padding: 16px 50px; cursor: pointer;
-            transition: all 0.5s ease;
-            animation: fadeInUp 2s ease 1.5s both;
-            text-transform: uppercase;
+            font-size: 4rem; font-weight: 900;
+            color: #e82127; letter-spacing: 0.1em;
+            animation: fadeInUp 1s ease both;
+            text-shadow: 0 0 40px rgba(232,33,39,0.5);
         }
-        .start-btn:hover {
-            background: #e82127; border-color: #e82127;
-            box-shadow: 0 0 40px rgba(232,33,39,0.4);
+        .countdown-label {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem; color: rgba(255,255,255,0.3);
+            letter-spacing: 0.4em; margin-top: 10px;
+            animation: fadeInUp 1s ease both;
         }
         .loading-bar {
             position: absolute; bottom: 80px; width: 300px; height: 2px;
             background: rgba(255,255,255,0.1); border-radius: 1px; overflow: hidden;
             animation: fadeInUp 2s ease 2s both;
         }
-        .loading-fill { height: 100%; width: 0%; background: #e82127; animation: loadProgress 3s ease 2.2s forwards; }
+        .loading-fill { height: 100%; width: 0%; background: #e82127; animation: loadProgress 3s ease 0.5s forwards; }
         .loading-text {
             font-family: 'Orbitron', sans-serif; font-size: 0.5rem;
             color: rgba(255,255,255,0.2); letter-spacing: 0.3em;
@@ -215,7 +214,8 @@
         <div class="tesla-logo"><span>T</span>ESLA</div>
         <div class="intro-sub">SELF-DRIVING AI</div>
         <div class="intro-line"></div>
-        <button class="start-btn" onclick="startSimulation()">INITIALIZE AUTOPILOT</button>
+        <div class="countdown" id="countdown">3</div>
+        <div class="countdown-label">INITIALIZING AUTOPILOT</div>
         <div class="loading-bar"><div class="loading-fill"></div></div>
         <div class="loading-text">LOADING NEURAL NETWORK + LiDAR</div>
     </div>
@@ -924,6 +924,22 @@ function startSimulation() {
         loop();
     }, 1500);
 }
+
+// Auto countdown 3, 2, 1 then start
+(function autoCountdown() {
+    const countEl = document.getElementById('countdown');
+    let count = 3;
+    const timer = setInterval(() => {
+        count--;
+        if (count > 0) {
+            countEl.textContent = count;
+        } else {
+            clearInterval(timer);
+            countEl.textContent = 'GO';
+            setTimeout(() => startSimulation(), 500);
+        }
+    }, 1000);
+})();
 
 document.addEventListener('keydown', e => {
     if (e.key === 'ArrowUp') targetSpeed = Math.min(200, targetSpeed + 10);
