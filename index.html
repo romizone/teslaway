@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tesla Self-Driving AI Simulation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #000; overflow: hidden;
+            width: 100vw; height: 100vh;
+        }
+
+        .intro-screen {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: #000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 1000; transition: opacity 1.5s ease;
+        }
+        .intro-screen.hidden { opacity: 0; pointer-events: none; }
+        .tesla-logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 5rem; font-weight: 900;
+            color: #fff; letter-spacing: 0.3em;
+            animation: logoPulse 3s ease-in-out infinite;
+            text-shadow: 0 0 60px rgba(255,0,0,0.3);
+        }
+        .tesla-logo span { color: #e82127; }
+        .intro-sub {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem; color: rgba(255,255,255,0.4);
+            letter-spacing: 0.8em; margin-top: 20px;
+            animation: fadeInUp 2s ease 0.5s both;
+        }
+        .intro-line {
+            width: 200px; height: 1px;
+            background: linear-gradient(90deg, transparent, #e82127, transparent);
+            margin: 30px 0; animation: expandLine 2s ease 1s both;
+        }
+        .start-btn {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.85rem; letter-spacing: 0.4em;
+            color: #fff; background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 16px 50px; cursor: pointer;
+            transition: all 0.5s ease;
+            animation: fadeInUp 2s ease 1.5s both;
+            text-transform: uppercase;
+        }
+        .start-btn:hover {
+            background: #e82127; border-color: #e82127;
+            box-shadow: 0 0 40px rgba(232,33,39,0.4);
+        }
+        .loading-bar {
+            position: absolute; bottom: 80px; width: 300px; height: 2px;
+            background: rgba(255,255,255,0.1); border-radius: 1px; overflow: hidden;
+            animation: fadeInUp 2s ease 2s both;
+        }
+        .loading-fill { height: 100%; width: 0%; background: #e82127; animation: loadProgress 3s ease 2.2s forwards; }
+        .loading-text {
+            font-family: 'Orbitron', sans-serif; font-size: 0.5rem;
+            color: rgba(255,255,255,0.2); letter-spacing: 0.3em;
+            margin-top: 10px; animation: fadeInUp 2s ease 2s both;
+        }
+
+        @keyframes logoPulse { 0%,100%{opacity:1} 50%{opacity:0.8} }
+        @keyframes fadeInUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes expandLine { from{width:0;opacity:0} to{width:200px;opacity:1} }
+        @keyframes loadProgress { to{width:100%} }
+
+        #simCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+        .hud {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 10; pointer-events: none;
+            opacity: 0; transition: opacity 1s ease;
+        }
+        .hud.active { opacity: 1; }
+
+        .hud-top {
+            position: absolute; top: 0; left: 0; right: 0; height: 60px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 30px;
+        }
+        .hud-status { display: flex; align-items: center; gap: 10px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00ff88; animation: blink 1.5s ease-in-out infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .status-text { font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #00ff88; letter-spacing: 0.2em; }
+        .hud-time { font-family: 'Orbitron', sans-serif; font-size: 0.75rem; color: rgba(255,255,255,0.6); letter-spacing: 0.15em; }
+
+        .hud-bottom {
+            position: absolute; bottom: 0; left: 0; right: 0; height: 180px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, transparent 100%);
+            display: flex; align-items: flex-end; padding: 20px 30px;
+        }
+        .speed-display { display: flex; align-items: baseline; gap: 5px; }
+        .speed-value { font-family: 'Orbitron', sans-serif; font-size: 3.5rem; font-weight: 900; color: #fff; line-height: 1; }
+        .speed-unit { font-family: 'Orbitron', sans-serif; font-size: 0.75rem; color: rgba(255,255,255,0.4); letter-spacing: 0.1em; }
+        .hud-center-bottom { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 10px; }
+        .ai-mode-badge {
+            font-family: 'Orbitron', sans-serif; font-size: 0.6rem; letter-spacing: 0.3em;
+            color: #e82127; border: 1px solid rgba(232,33,39,0.3);
+            padding: 5px 18px; border-radius: 2px; background: rgba(232,33,39,0.05);
+            animation: pulseBorder 2s ease-in-out infinite;
+        }
+        .lidar-badge {
+            font-family: 'Orbitron', sans-serif; font-size: 0.5rem; letter-spacing: 0.2em;
+            color: #00c8ff; border: 1px solid rgba(0,200,255,0.2);
+            padding: 3px 12px; border-radius: 2px; background: rgba(0,200,255,0.05);
+        }
+        @keyframes pulseBorder { 0%,100%{border-color:rgba(232,33,39,0.3)} 50%{border-color:rgba(232,33,39,0.8)} }
+        .road-info { font-family: 'Inter', sans-serif; font-size: 0.65rem; color: rgba(255,255,255,0.35); letter-spacing: 0.1em; }
+        .hud-right-bottom { text-align: right; }
+        .battery-label { font-family: 'Orbitron', sans-serif; font-size: 0.5rem; color: rgba(255,255,255,0.3); letter-spacing: 0.2em; margin-bottom: 4px; }
+        .battery-bar { width: 110px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+        .battery-fill { height: 100%; width: 87%; background: linear-gradient(90deg, #00ff88, #00cc66); border-radius: 2px; }
+        .battery-pct { font-family: 'Orbitron', sans-serif; font-size: 0.65rem; color: #00ff88; margin-top: 4px; }
+
+        .hud-left {
+            position: absolute; left: 20px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 14px;
+        }
+        .sensor-item { display: flex; align-items: center; gap: 8px; }
+        .sensor-icon {
+            width: 24px; height: 24px; border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem;
+        }
+        .sensor-icon.s-green { border-color: #00ff88; color: #00ff88; }
+        .sensor-icon.s-blue { border-color: #00c8ff; color: #00c8ff; }
+        .sensor-name { font-family: 'Orbitron', sans-serif; font-size: 0.45rem; color: rgba(255,255,255,0.3); letter-spacing: 0.15em; }
+        .sensor-val { font-family: 'Orbitron', sans-serif; font-size: 0.6rem; color: rgba(255,255,255,0.7); }
+
+        .hud-right {
+            position: absolute; right: 20px; top: 70px;
+            display: flex; flex-direction: column; gap: 4px; width: 190px;
+        }
+        .detection-title { font-family: 'Orbitron', sans-serif; font-size: 0.45rem; color: rgba(255,255,255,0.3); letter-spacing: 0.3em; margin-bottom: 2px; }
+        .detection-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .det-label { font-size: 0.6rem; color: rgba(255,255,255,0.5); }
+        .det-value { font-family: 'Orbitron', sans-serif; font-size: 0.55rem; padding: 2px 6px; border-radius: 2px; }
+        .dv-g { color: #00ff88; background: rgba(0,255,136,0.1); }
+        .dv-b { color: #00c8ff; background: rgba(0,200,255,0.1); }
+        .dv-y { color: #ffaa00; background: rgba(255,170,0,0.1); }
+
+        .ai-thinking {
+            position: absolute; top: 65px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+        }
+        .ai-thinking-text { font-family: 'Orbitron', sans-serif; font-size: 0.5rem; color: rgba(255,255,255,0.2); letter-spacing: 0.3em; }
+        .ai-decision {
+            font-family: 'Inter', sans-serif; font-size: 0.7rem; color: rgba(255,255,255,0.6);
+            background: rgba(0,0,0,0.4); padding: 5px 14px; border-radius: 3px; border-left: 2px solid #e82127;
+        }
+
+        .lidar-minimap {
+            position: absolute; bottom: 90px; right: 20px;
+            width: 140px; height: 140px;
+            border: 1px solid rgba(0,200,255,0.2); border-radius: 50%;
+            overflow: hidden; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+        }
+        .lidar-minimap canvas { width: 100%; height: 100%; }
+        .lidar-minimap-label {
+            position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+            font-family: 'Orbitron', sans-serif; font-size: 0.4rem; color: rgba(0,200,255,0.5);
+            letter-spacing: 0.3em; white-space: nowrap;
+        }
+        .lidar-hint {
+            position: absolute; bottom: 68px; right: 20px;
+            font-family: 'Orbitron', sans-serif; font-size: 0.4rem; color: rgba(255,255,255,0.15); letter-spacing: 0.15em;
+        }
+
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 5; pointer-events: none;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.02) 2px, rgba(0,0,0,0.02) 4px);
+        }
+        .vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 4; pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+        }
+        .cine-bar { position: fixed; left: 0; right: 0; height: 40px; background: #000; z-index: 8; }
+        .cine-bar.top { top: 0; } .cine-bar.bottom { bottom: 0; }
+        .notification {
+            position: fixed; top: 55px; left: 50%; transform: translateX(-50%) translateY(-100px);
+            font-family: 'Orbitron', sans-serif; font-size: 0.65rem; letter-spacing: 0.3em;
+            color: #fff; background: rgba(232,33,39,0.15); border: 1px solid rgba(232,33,39,0.3);
+            padding: 10px 25px; border-radius: 3px; z-index: 20;
+            transition: transform 0.8s cubic-bezier(0.16,1,0.3,1); backdrop-filter: blur(10px);
+        }
+        .notification.show { transform: translateX(-50%) translateY(0); }
+
+        /* Traffic light indicator */
+        .traffic-indicator {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -80px);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            opacity: 0; transition: opacity 0.5s ease;
+        }
+        .traffic-indicator.visible { opacity: 1; }
+        .tl-label { font-family: 'Orbitron', sans-serif; font-size: 0.5rem; color: rgba(255,255,255,0.4); letter-spacing: 0.2em; }
+        .tl-lights { display: flex; gap: 6px; }
+        .tl-light { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); }
+        .tl-red { background: rgba(255,50,50,0.2); } .tl-red.on { background: #ff3333; box-shadow: 0 0 15px #ff3333; }
+        .tl-yellow { background: rgba(255,200,0,0.2); } .tl-yellow.on { background: #ffc800; box-shadow: 0 0 15px #ffc800; }
+        .tl-green { background: rgba(0,255,100,0.2); } .tl-green.on { background: #00ff64; box-shadow: 0 0 15px #00ff64; }
+        .tl-countdown { font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #fff; margin-top: 2px; }
+    </style>
+</head>
+<body>
+    <div class="intro-screen" id="introScreen">
+        <div class="tesla-logo"><span>T</span>ESLA</div>
+        <div class="intro-sub">SELF-DRIVING AI</div>
+        <div class="intro-line"></div>
+        <button class="start-btn" onclick="startSimulation()">INITIALIZE AUTOPILOT</button>
+        <div class="loading-bar"><div class="loading-fill"></div></div>
+        <div class="loading-text">LOADING NEURAL NETWORK + LiDAR</div>
+    </div>
+
+    <canvas id="simCanvas"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="cine-bar top"></div>
+    <div class="cine-bar bottom"></div>
+
+    <div class="hud" id="hud">
+        <div class="hud-top">
+            <div class="hud-status">
+                <div class="status-dot"></div>
+                <div class="status-text" id="statusText">FSD + LiDAR ACTIVE</div>
+            </div>
+            <div class="hud-time" id="hudTime">00:00:00</div>
+        </div>
+
+        <div class="ai-thinking">
+            <div class="ai-thinking-text">NEURAL NETWORK + LiDAR PROCESSING</div>
+            <div class="ai-decision" id="aiDecision">Analyzing road ahead...</div>
+        </div>
+
+        <div class="hud-left">
+            <div class="sensor-item"><div class="sensor-icon s-green">8</div><div class="sensor-info"><div class="sensor-name">CAMERAS</div><div class="sensor-val" id="camVal">ACTIVE</div></div></div>
+            <div class="sensor-item"><div class="sensor-icon s-blue">L</div><div class="sensor-info"><div class="sensor-name">LiDAR</div><div class="sensor-val" style="color:#00c8ff" id="lidarVal">4x ACTIVE</div></div></div>
+            <div class="sensor-item"><div class="sensor-icon s-blue">R</div><div class="sensor-info"><div class="sensor-name">RADAR</div><div class="sensor-val" style="color:#00c8ff" id="radarVal">360 SCAN</div></div></div>
+            <div class="sensor-item"><div class="sensor-icon s-green">U</div><div class="sensor-info"><div class="sensor-name">ULTRASONIC</div><div class="sensor-val">12 SENSORS</div></div></div>
+            <div class="sensor-item"><div class="sensor-icon s-green">N</div><div class="sensor-info"><div class="sensor-name">NEURAL NET</div><div class="sensor-val">v4.7.2</div></div></div>
+            <div class="sensor-item"><div class="sensor-icon s-green">G</div><div class="sensor-info"><div class="sensor-name">GPS</div><div class="sensor-val">LOCKED</div></div></div>
+        </div>
+
+        <div class="hud-right">
+            <div class="detection-title">AI OBJECT DETECTION</div>
+            <div class="detection-item"><span class="det-label">Lane Lines</span><span class="det-value dv-g" id="dLane">98.7%</span></div>
+            <div class="detection-item"><span class="det-label">Vehicles</span><span class="det-value dv-g" id="dVeh">96.2%</span></div>
+            <div class="detection-item"><span class="det-label">Pedestrians</span><span class="det-value dv-y" id="dPed">94.1%</span></div>
+            <div class="detection-item"><span class="det-label">Traffic Lights</span><span class="det-value dv-g" id="dTL">99.5%</span></div>
+            <div class="detection-item"><span class="det-label">Road Signs</span><span class="det-value dv-g" id="dSign">99.3%</span></div>
+            <div class="detection-title" style="margin-top:8px;color:rgba(0,200,255,0.5)">LiDAR POINT CLOUD</div>
+            <div class="detection-item"><span class="det-label">Points/sec</span><span class="det-value dv-b" id="lPts">1.2M</span></div>
+            <div class="detection-item"><span class="det-label">Range</span><span class="det-value dv-b" id="lRng">200m</span></div>
+            <div class="detection-item"><span class="det-label">3D Map</span><span class="det-value dv-b" id="lMap">ACTIVE</span></div>
+            <div class="detection-item"><span class="det-label">Accuracy</span><span class="det-value dv-b" id="lAcc">99.7%</span></div>
+        </div>
+
+        <div class="traffic-indicator" id="trafficInd">
+            <div class="tl-label">TRAFFIC SIGNAL</div>
+            <div class="tl-lights">
+                <div class="tl-light tl-red" id="tlR"></div>
+                <div class="tl-light tl-yellow" id="tlY"></div>
+                <div class="tl-light tl-green" id="tlG"></div>
+            </div>
+            <div class="tl-countdown" id="tlCount"></div>
+        </div>
+
+        <div class="hud-bottom">
+            <div class="speed-display">
+                <div class="speed-value" id="speedValue">0</div>
+                <div class="speed-unit">KM/H</div>
+            </div>
+            <div class="hud-center-bottom">
+                <div class="ai-mode-badge">FULL SELF-DRIVING BETA</div>
+                <div class="lidar-badge">LiDAR + VISION FUSION</div>
+                <div class="road-info" id="roadInfo">Highway 101 North - Palo Alto, CA</div>
+            </div>
+            <div class="hud-right-bottom">
+                <div class="battery-label">BATTERY</div>
+                <div class="battery-bar"><div class="battery-fill" id="batFill"></div></div>
+                <div class="battery-pct" id="batPct">87%</div>
+            </div>
+        </div>
+
+        <div class="lidar-minimap">
+            <div class="lidar-minimap-label">LiDAR 360</div>
+            <canvas id="lidarCanvas" width="140" height="140"></canvas>
+        </div>
+        <div class="lidar-hint">[L] LiDAR &nbsp; [ARROWS] SPEED</div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const ldrC = document.getElementById('lidarCanvas');
+const ldrX = ldrC.getContext('2d');
+let W, H, running = false, frame = 0;
+let speed = 0, targetSpeed = 60, battery = 87, simTime = 0;
+let camShake = {x:0, y:0};
+let lidarOn = true, lidarAng = 0;
+
+// Road system
+let roadZ = 0; // total distance traveled
+let currentSegIdx = 0;
+let roadSegs = []; // road segments define the route
+let envObjects = []; // buildings, trees
+let aiCars = [];
+let particles = [];
+
+// Traffic light
+let tlState = 'green'; // green, yellow, red
+let tlTimer = 0;
+let tlCountdown = 15;
+let nearIntersection = false;
+let intersectionDist = 0;
+
+// Road segment types
+function generateRoute() {
+    roadSegs = [];
+    const types = ['straight','straight','curve_left','straight','intersection_4','straight','curve_right','straight','intersection_3','straight','straight','curve_left','straight','intersection_4','straight','curve_right','straight','straight','intersection_3','straight'];
+    let z = 0;
+    types.forEach(type => {
+        const len = type.includes('intersection') ? 200 : (type === 'straight' ? 400 + Math.random()*300 : 350);
+        roadSegs.push({ type, startZ: z, length: len });
+        z += len;
+    });
+    // Loop
+    const totalLen = z;
+    roadSegs.totalLength = totalLen;
+}
+
+function getSegAtZ(z) {
+    const tz = z % roadSegs.totalLength;
+    for (let i = 0; i < roadSegs.length; i++) {
+        const s = roadSegs[i];
+        if (tz >= s.startZ && tz < s.startZ + s.length) {
+            return { seg: s, localZ: tz - s.startZ, idx: i };
+        }
+    }
+    return { seg: roadSegs[0], localZ: 0, idx: 0 };
+}
+
+function getCurveAtZ(z) {
+    const { seg, localZ } = getSegAtZ(z);
+    const t = localZ / seg.length;
+    if (seg.type === 'curve_left') return -Math.sin(t * Math.PI) * 1.8;
+    if (seg.type === 'curve_right') return Math.sin(t * Math.PI) * 1.8;
+    return 0;
+}
+
+function isIntersectionAtZ(z) {
+    const { seg, localZ } = getSegAtZ(z);
+    return seg.type.includes('intersection');
+}
+
+// Init environment
+function initEnv() {
+    for (let i = 0; i < 80; i++) {
+        const side = Math.random() > 0.5 ? 1 : -1;
+        envObjects.push({
+            type: Math.random() > 0.4 ? 'building' : 'tree',
+            z: Math.random() * (roadSegs.totalLength || 5000),
+            side,
+            offset: 180 + Math.random() * 150,
+            width: 60 + Math.random() * 100,
+            height: 80 + Math.random() * 200,
+            color: `hsl(${215+Math.random()*25}, ${10+Math.random()*12}%, ${10+Math.random()*10}%)`,
+            treeH: 50 + Math.random() * 60
+        });
+    }
+    for (let i = 0; i < 6; i++) {
+        aiCars.push({
+            z: 300 + Math.random() * 1200,
+            lane: (Math.floor(Math.random()*3)-1) * 80,
+            spd: 0.3 + Math.random() * 0.5,
+            color: ['#c0392b','#2980b9','#ecf0f1','#2c3e50','#f39c12','#1abc9c'][Math.floor(Math.random()*6)],
+            det: false
+        });
+    }
+}
+
+// Resize
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+// 3D projection
+function proj(x, y, z, curve) {
+    const fov = 200;
+    const s = fov / (z + fov);
+    const cx = curve || 0;
+    return { x: W/2 + (x + cx * z * z * 0.0000008) * s, y: H * 0.52 - y * s + 20, s };
+}
+
+// ===== DRAW =====
+function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, H * 0.52);
+    g.addColorStop(0, '#080818'); g.addColorStop(0.4, '#0c0f22');
+    g.addColorStop(0.7, '#131630'); g.addColorStop(1, '#181c38');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * 0.52);
+
+    // Stars
+    for (let i = 0; i < 150; i++) {
+        const sx = (i * 7919 + 42) % W;
+        const sy = (i * 6271 + 42) % (H * 0.42);
+        const br = 0.15 + Math.sin(frame * 0.015 + i) * 0.12 + 0.12;
+        ctx.fillStyle = `rgba(255,255,255,${br})`;
+        ctx.beginPath(); ctx.arc(sx, sy, i%4===0?1.3:0.7, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Moon
+    ctx.fillStyle = 'rgba(255,255,230,0.04)'; ctx.beginPath(); ctx.arc(W*0.8, H*0.1, 60, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,220,0.85)'; ctx.beginPath(); ctx.arc(W*0.8, H*0.1, 18, 0, Math.PI*2); ctx.fill();
+}
+
+function drawRoad() {
+    const segs = 140, segD = 16;
+    for (let i = segs; i >= 0; i--) {
+        const z1 = i * segD, z2 = (i+1) * segD;
+        const worldZ1 = roadZ + z1, worldZ2 = roadZ + z2;
+        const c1 = getCurveAtZ(worldZ1), c2 = getCurveAtZ(worldZ2);
+        const cAvg = (c1 + c2) / 2;
+
+        const rw = 280; // road half-width
+        const p1L = proj(-rw, 0, z1, cAvg);
+        const p1R = proj(rw, 0, z1, cAvg);
+        const p2L = proj(-rw, 0, z2, cAvg);
+        const p2R = proj(rw, 0, z2, cAvg);
+
+        const dark = Math.max(0, 1 - i / segs);
+
+        // Asphalt
+        ctx.fillStyle = `rgba(30,30,35,${dark})`;
+        ctx.beginPath();
+        ctx.moveTo(p1L.x, p1L.y); ctx.lineTo(p1R.x, p1R.y);
+        ctx.lineTo(p2R.x, p2R.y); ctx.lineTo(p2L.x, p2L.y);
+        ctx.fill();
+
+        // Sidewalk / curb
+        const sw = 30;
+        const sL1 = proj(-rw-sw, 0, z1, cAvg), sL2 = proj(-rw-sw, 0, z2, cAvg);
+        const sR1 = proj(rw+sw, 0, z1, cAvg), sR2 = proj(rw+sw, 0, z2, cAvg);
+        ctx.fillStyle = `rgba(45,45,50,${dark*0.7})`;
+        ctx.beginPath(); ctx.moveTo(p1L.x,p1L.y); ctx.lineTo(sL1.x,sL1.y); ctx.lineTo(sL2.x,sL2.y); ctx.lineTo(p2L.x,p2L.y); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(p1R.x,p1R.y); ctx.lineTo(sR1.x,sR1.y); ctx.lineTo(sR2.x,sR2.y); ctx.lineTo(p2R.x,p2R.y); ctx.fill();
+
+        // Curb line (white)
+        ctx.strokeStyle = `rgba(255,255,255,${dark * 0.25})`;
+        ctx.lineWidth = Math.max(0.5, 2 * p1L.s);
+        ctx.beginPath(); ctx.moveTo(p1L.x, p1L.y); ctx.lineTo(p2L.x, p2L.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(p1R.x, p1R.y); ctx.lineTo(p2R.x, p2R.y); ctx.stroke();
+
+        // Lane markings - dashes
+        const lz = (z1 + roadZ) % 70;
+        if (lz < 35) {
+            // Lane dashes at -90, 0, 90
+            [-90, 90].forEach(lx => {
+                const a = proj(lx, 0, z1, cAvg), b = proj(lx, 0, z2, cAvg);
+                ctx.strokeStyle = `rgba(255,255,255,${dark * 0.55})`;
+                ctx.lineWidth = Math.max(1, 3 * a.s);
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+            });
+        }
+
+        // Center double yellow
+        [-5, 5].forEach(lx => {
+            const a = proj(lx, 0, z1, cAvg), b = proj(lx, 0, z2, cAvg);
+            ctx.strokeStyle = `rgba(255,200,0,${dark * 0.35})`;
+            ctx.lineWidth = Math.max(0.5, 1.5 * a.s);
+            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        });
+
+        // Intersection cross-walk
+        if (isIntersectionAtZ(worldZ1)) {
+            const crossZ = (z1 + roadZ) % 30;
+            if (crossZ < 15) {
+                for (let cx = -240; cx <= 240; cx += 40) {
+                    const a = proj(cx, 0, z1, cAvg);
+                    ctx.fillStyle = `rgba(255,255,255,${dark * 0.4})`;
+                    ctx.fillRect(a.x - 8 * a.s, a.y - 1, 16 * a.s, Math.max(1, 3 * a.s));
+                }
+            }
+
+            // Side roads (visual only)
+            if (i % 8 === 0) {
+                const { seg } = getSegAtZ(worldZ1);
+                if (seg.type === 'intersection_4') {
+                    [-1, 1].forEach(side => {
+                        const sideP = proj(side * rw, 0, z1, cAvg);
+                        const sideOut = proj(side * (rw + 200), 0, z1, cAvg);
+                        ctx.fillStyle = `rgba(30,30,35,${dark * 0.4})`;
+                        ctx.fillRect(
+                            Math.min(sideP.x, sideOut.x),
+                            sideP.y - 25 * sideP.s,
+                            Math.abs(sideOut.x - sideP.x),
+                            50 * sideP.s
+                        );
+                    });
+                } else if (seg.type === 'intersection_3') {
+                    const sideP = proj(rw, 0, z1, cAvg);
+                    const sideOut = proj(rw + 200, 0, z1, cAvg);
+                    ctx.fillStyle = `rgba(30,30,35,${dark * 0.4})`;
+                    ctx.fillRect(sideP.x, sideP.y - 25*sideP.s, sideOut.x - sideP.x, 50*sideP.s);
+                }
+            }
+        }
+
+        // AI red scan line
+        if (i === Math.floor((frame * 2) % segs)) {
+            const sA = proj(-260, 0, z1, cAvg), sB = proj(260, 0, z1, cAvg);
+            ctx.strokeStyle = `rgba(232,33,39,${0.25 * dark})`; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+        }
+
+        // LiDAR blue scan line
+        if (lidarOn && i === Math.floor((frame * 3 + 40) % segs)) {
+            const sA = proj(-260, 0, z1, cAvg), sB = proj(260, 0, z1, cAvg);
+            ctx.strokeStyle = `rgba(0,200,255,${0.2 * dark})`; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+        }
+    }
+}
+
+function drawEnv() {
+    const totalLen = roadSegs.totalLength || 5000;
+    envObjects.sort((a, b) => {
+        const az = ((a.z - roadZ) % totalLen + totalLen) % totalLen;
+        const bz = ((b.z - roadZ) % totalLen + totalLen) % totalLen;
+        return bz - az;
+    });
+
+    envObjects.forEach(obj => {
+        let z = ((obj.z - roadZ) % totalLen + totalLen) % totalLen;
+        if (z > 2200 || z < 5) return;
+        const c = getCurveAtZ(roadZ + z);
+        const base = proj(obj.side * obj.offset, 0, z, c);
+        if (base.s < 0.015 || base.x < -300 || base.x > W + 300) return;
+
+        if (obj.type === 'building') {
+            const top = proj(obj.side * obj.offset, obj.height, z, c);
+            const w = obj.width * base.s;
+            const h = base.y - top.y;
+            if (h < 2) return;
+
+            ctx.fillStyle = obj.color;
+            ctx.fillRect(base.x - w/2, top.y, w, h);
+
+            // Windows
+            const ws = Math.max(2, 4 * base.s);
+            const cols = Math.floor(w / (ws * 2.5));
+            const rows = Math.floor(h / (ws * 2.5));
+            for (let r = 0; r < rows; r++) {
+                for (let cl = 0; cl < cols; cl++) {
+                    if (Math.sin(obj.z * 3 + r * 7 + cl * 13) > 0.15) {
+                        ctx.fillStyle = `rgba(255,220,150,${0.12 + Math.random()*0.08})`;
+                        ctx.fillRect(base.x - w/2 + cl*(w/cols) + ws*0.3, top.y + r*(h/rows) + ws*0.3, ws, ws);
+                    }
+                }
+            }
+
+            // LiDAR dots on building edges
+            if (lidarOn && z < 600) {
+                ctx.fillStyle = 'rgba(0,200,255,0.25)';
+                for (let d = 0; d < h; d += 8) {
+                    ctx.fillRect(base.x - w/2, top.y + d, 2, 2);
+                    ctx.fillRect(base.x + w/2, top.y + d, 2, 2);
+                }
+            }
+        } else {
+            // Tree
+            const th = obj.treeH;
+            const top = proj(obj.side * obj.offset, th, z, c);
+            const tw = Math.max(1, 3 * base.s);
+            ctx.fillStyle = '#15120e';
+            ctx.fillRect(base.x - tw/2, top.y + (base.y-top.y)*0.45, tw, (base.y-top.y)*0.55);
+
+            const cw = Math.max(3, th * 0.45 * base.s);
+            const ch = (base.y - top.y) * 0.55;
+            ctx.fillStyle = `rgba(15,${35+Math.floor(th*0.15)},18,0.9)`;
+            ctx.beginPath(); ctx.ellipse(base.x, top.y + ch*0.3, cw, ch, 0, 0, Math.PI*2); ctx.fill();
+
+            // LiDAR dots on trees
+            if (lidarOn && z < 500) {
+                ctx.fillStyle = 'rgba(0,200,255,0.3)';
+                for (let d = 0; d < 5; d++) {
+                    const dx = base.x + (Math.random()-0.5)*cw*2;
+                    const dy = top.y + Math.random()*ch;
+                    ctx.fillRect(dx, dy, 1.5, 1.5);
+                }
+            }
+        }
+    });
+}
+
+function drawTrafficLights() {
+    // Check if near intersection
+    const lookAhead = roadZ + 400;
+    nearIntersection = false;
+    for (let d = 100; d < 600; d += 50) {
+        if (isIntersectionAtZ(roadZ + d)) {
+            nearIntersection = true;
+            intersectionDist = d;
+            break;
+        }
+    }
+
+    if (!nearIntersection) {
+        document.getElementById('trafficInd').classList.remove('visible');
+        return;
+    }
+
+    document.getElementById('trafficInd').classList.add('visible');
+
+    // Draw 3D traffic light pole
+    const z = intersectionDist;
+    const c = getCurveAtZ(roadZ + z);
+    const poleBase = proj(200, 0, z, c);
+    const poleTop = proj(200, 140, z, c);
+    if (poleBase.s > 0.03) {
+        ctx.strokeStyle = 'rgba(60,60,60,0.8)';
+        ctx.lineWidth = Math.max(1, 3 * poleBase.s);
+        ctx.beginPath(); ctx.moveTo(poleBase.x, poleBase.y); ctx.lineTo(poleTop.x, poleTop.y); ctx.stroke();
+
+        // Arm
+        const armEnd = proj(50, 138, z, c);
+        ctx.beginPath(); ctx.moveTo(poleTop.x, poleTop.y); ctx.lineTo(armEnd.x, armEnd.y); ctx.stroke();
+
+        // Light housing
+        const lSize = Math.max(4, 12 * poleBase.s);
+        const lx = armEnd.x, ly = armEnd.y;
+        ctx.fillStyle = 'rgba(20,20,20,0.9)';
+        ctx.fillRect(lx - lSize * 0.7, ly - lSize * 1.8, lSize * 1.4, lSize * 3.6);
+
+        // Lights
+        const colors = [
+            { c: tlState === 'red' ? 'rgba(255,50,50,1)' : 'rgba(60,20,20,0.5)', glow: tlState === 'red' },
+            { c: tlState === 'yellow' ? 'rgba(255,200,0,1)' : 'rgba(60,50,10,0.5)', glow: tlState === 'yellow' },
+            { c: tlState === 'green' ? 'rgba(0,255,100,1)' : 'rgba(10,50,20,0.5)', glow: tlState === 'green' }
+        ];
+        colors.forEach((cl, idx) => {
+            const cy = ly - lSize * 1.2 + idx * lSize * 1.2;
+            if (cl.glow) {
+                ctx.fillStyle = cl.c.replace('1)', '0.15)');
+                ctx.beginPath(); ctx.arc(lx, cy, lSize * 2, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.fillStyle = cl.c;
+            ctx.beginPath(); ctx.arc(lx, cy, lSize * 0.35, 0, Math.PI*2); ctx.fill();
+        });
+
+        // LiDAR detection on traffic light
+        if (lidarOn) {
+            ctx.strokeStyle = 'rgba(0,200,255,0.4)';
+            ctx.lineWidth = 0.8; ctx.setLineDash([2,3]);
+            ctx.strokeRect(lx - lSize, ly - lSize*2, lSize*2, lSize*4);
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(0,200,255,0.5)';
+            ctx.font = `${Math.max(7, 9*poleBase.s)}px Orbitron`;
+            ctx.textAlign = 'center';
+            ctx.fillText('SIGNAL', lx, ly + lSize * 2.5);
+        }
+    }
+
+    // HUD traffic indicator
+    document.getElementById('tlR').className = 'tl-light tl-red' + (tlState==='red'?' on':'');
+    document.getElementById('tlY').className = 'tl-light tl-yellow' + (tlState==='yellow'?' on':'');
+    document.getElementById('tlG').className = 'tl-light tl-green' + (tlState==='green'?' on':'');
+    document.getElementById('tlCount').textContent = Math.ceil(tlCountdown) + 's';
+}
+
+function drawAICars() {
+    aiCars.sort((a,b) => b.z - a.z);
+    aiCars.forEach(car => {
+        car.z -= (speed * 0.08 - car.spd * speed * 0.04);
+        if (car.z < -50) { car.z = 600 + Math.random()*1000; car.lane = (Math.floor(Math.random()*3)-1)*80; }
+        if (car.z < 0 || car.z > 1800) return;
+
+        const c = getCurveAtZ(roadZ + car.z);
+        const base = proj(car.lane, 0, car.z, c);
+        const top = proj(car.lane, 32, car.z, c);
+        if (base.s < 0.02) return;
+
+        const cw = 45 * base.s, ch = base.y - top.y;
+        ctx.fillStyle = car.color;
+        ctx.beginPath(); ctx.roundRect(base.x-cw/2, top.y, cw, ch, 2*base.s); ctx.fill();
+        ctx.fillStyle = 'rgba(80,130,180,0.3)';
+        ctx.fillRect(base.x-cw*0.35, top.y+ch*0.1, cw*0.7, ch*0.25);
+
+        // Tail lights
+        if (car.z < 400) {
+            ctx.fillStyle = 'rgba(255,0,0,0.8)';
+            ctx.fillRect(base.x-cw/2, base.y-2*base.s, 4*base.s, 2*base.s);
+            ctx.fillRect(base.x+cw/2-4*base.s, base.y-2*base.s, 4*base.s, 2*base.s);
+        }
+
+        // AI detection
+        car.det = car.z < 600;
+        if (car.det) {
+            ctx.strokeStyle = `rgba(0,255,136,${0.4+Math.sin(frame*0.1)*0.2})`;
+            ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+            ctx.strokeRect(base.x-cw/2-4, top.y-4, cw+8, ch+8);
+            ctx.setLineDash([]);
+            const dist = Math.floor(car.z*0.15);
+            ctx.fillStyle = 'rgba(0,255,136,0.7)';
+            ctx.font = `${Math.max(7,10*base.s)}px Orbitron`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`${dist}m`, base.x, top.y-8);
+
+            // LiDAR wireframe
+            if (lidarOn) {
+                ctx.strokeStyle = `rgba(0,200,255,${0.25+Math.sin(frame*0.08)*0.1})`;
+                ctx.lineWidth = 0.6; ctx.setLineDash([2,2]);
+                ctx.strokeRect(base.x-cw/2-7, top.y-7, cw+14, ch+14);
+                ctx.setLineDash([]);
+                // LiDAR vertical beams
+                for (let b = 0; b < 5; b++) {
+                    const bx = base.x - cw/2 + (cw/5)*b;
+                    ctx.strokeStyle = `rgba(0,200,255,${0.12+Math.sin(frame*0.12+b)*0.08})`;
+                    ctx.lineWidth = 0.4;
+                    ctx.beginPath(); ctx.moveTo(bx, base.y); ctx.lineTo(bx, top.y); ctx.stroke();
+                }
+            }
+        }
+    });
+}
+
+function drawLidarCloud() {
+    if (!lidarOn) return;
+    // Ground points
+    for (let i = 0; i < 150; i++) {
+        const z = (i/150)*1200;
+        const x = Math.sin(i*7.3+frame*0.015) * 250 * (1-z/1500);
+        const c = getCurveAtZ(roadZ + z);
+        const p = proj(x, Math.sin(i*3.1)*3, z, c);
+        if (p.s < 0.01) continue;
+        const dr = z/1200;
+        const r = dr < 0.33 ? 0 : (dr < 0.66 ? 0 : 100);
+        const g = dr < 0.33 ? 255 : (dr < 0.66 ? 150 : 50);
+        const b = 255;
+        ctx.fillStyle = `rgba(${r},${g},${b},${(1-dr)*0.45})`;
+        ctx.fillRect(p.x, p.y, Math.max(1, 2.5*p.s), Math.max(1, 2.5*p.s));
+    }
+}
+
+function drawLidarMinimap() {
+    if (!ldrX || !lidarOn) return;
+    const cw = 140, ch = 140, cx = cw/2, cy = ch/2;
+    ldrX.fillStyle = 'rgba(0,0,0,0.12)'; ldrX.fillRect(0,0,cw,ch);
+
+    // Circles
+    ldrX.strokeStyle = 'rgba(0,200,255,0.08)'; ldrX.lineWidth = 0.5;
+    [20,40,60].forEach(r => { ldrX.beginPath(); ldrX.arc(cx,cy,r,0,Math.PI*2); ldrX.stroke(); });
+
+    // Cross
+    ldrX.strokeStyle = 'rgba(0,200,255,0.06)';
+    ldrX.beginPath(); ldrX.moveTo(cx,0); ldrX.lineTo(cx,ch); ldrX.stroke();
+    ldrX.beginPath(); ldrX.moveTo(0,cy); ldrX.lineTo(cw,cy); ldrX.stroke();
+
+    // Sweep
+    lidarAng += 0.04;
+    const sx = cx + Math.cos(lidarAng)*60, sy = cy + Math.sin(lidarAng)*60;
+    const sg = ldrX.createLinearGradient(cx,cy,sx,sy);
+    sg.addColorStop(0, 'rgba(0,200,255,0.4)'); sg.addColorStop(1, 'rgba(0,200,255,0)');
+    ldrX.strokeStyle = sg; ldrX.lineWidth = 2;
+    ldrX.beginPath(); ldrX.moveTo(cx,cy); ldrX.lineTo(sx,sy); ldrX.stroke();
+
+    // Ego
+    ldrX.fillStyle = '#00ff88'; ldrX.beginPath(); ldrX.arc(cx,cy,3,0,Math.PI*2); ldrX.fill();
+
+    // Cars
+    aiCars.forEach(car => {
+        if (car.z > 1000 || car.z < 0) return;
+        const mx = cx + (car.lane/80)*10;
+        const my = cy - (car.z/1000)*55;
+        ldrX.fillStyle = `rgba(255,60,60,${car.det?0.8:0.3})`;
+        ldrX.beginPath(); ldrX.arc(mx,my,2,0,Math.PI*2); ldrX.fill();
+    });
+
+    // Road edges
+    ldrX.strokeStyle = 'rgba(0,200,255,0.12)'; ldrX.lineWidth = 0.5;
+    ldrX.beginPath(); ldrX.moveTo(cx-25,cy); ldrX.lineTo(cx-12,cy-60); ldrX.stroke();
+    ldrX.beginPath(); ldrX.moveTo(cx+25,cy); ldrX.lineTo(cx+12,cy-60); ldrX.stroke();
+
+    // Env dots
+    if (frame%3===0) {
+        for (let i=0;i<6;i++) {
+            const a = Math.random()*Math.PI*2, d = 25+Math.random()*30;
+            ldrX.fillStyle = `rgba(0,200,255,${0.15+Math.random()*0.2})`;
+            ldrX.fillRect(cx+Math.cos(a)*d, cy+Math.sin(a)*d, 1.5, 1.5);
+        }
+    }
+}
+
+function drawHood() {
+    const g = ctx.createLinearGradient(0,H-60,0,H);
+    g.addColorStop(0,'transparent'); g.addColorStop(1,'rgba(20,20,25,0.5)');
+    ctx.fillStyle = g; ctx.fillRect(0,H-60,W,60);
+}
+
+// Traffic light logic
+function updateTrafficLight() {
+    tlTimer += 1/60;
+    tlCountdown -= 1/60;
+    if (tlCountdown <= 0) {
+        if (tlState === 'green') { tlState = 'yellow'; tlCountdown = 3; }
+        else if (tlState === 'yellow') { tlState = 'red'; tlCountdown = 12; }
+        else { tlState = 'green'; tlCountdown = 15; }
+    }
+
+    // Slow down for red
+    if (nearIntersection && intersectionDist < 350) {
+        if (tlState === 'red') targetSpeed = Math.max(0, intersectionDist * 0.15);
+        else if (tlState === 'yellow' && intersectionDist > 100) targetSpeed = 25;
+        else targetSpeed = 55 + Math.random()*5;
+    } else {
+        if (frame % 300 === 0) targetSpeed = 55 + Math.random() * 40;
+    }
+}
+
+const decisions = [
+    "Maintaining lane position","Scanning surroundings - all clear","Vehicle detected - adjusting speed",
+    "Lane departure prevention active","Optimizing route","Monitoring blind spots",
+    "Analyzing road curvature","Traffic flow analysis complete","Adjusting following distance",
+    "LiDAR: 3D point cloud updated","LiDAR + Vision fusion: enhanced","LiDAR: Object depth mapping",
+    "LiDAR: Road surface mapped","Sensor fusion: nominal","Predicting trajectory ahead",
+    "Intersection approach - scanning","Traffic light detected","Cross-traffic monitoring",
+    "Preparing for turn","Speed adjusted for curve","LiDAR: Blind spot clear",
+    "Night vision: enhanced","3D environment reconstructed","Path planning updated"
+];
+const roads = [
+    "Market Street - San Francisco, CA","Highway 101 N - Palo Alto, CA","El Camino Real - Mountain View, CA",
+    "University Ave - Stanford, CA","Stevens Creek Blvd - Cupertino, CA","Sand Hill Rd - Menlo Park, CA",
+    "Page Mill Road - Palo Alto, CA","Castro Street - Mountain View, CA"
+];
+
+function updateHUD() {
+    speed += (targetSpeed - speed) * 0.015;
+    if (speed < 0.5) speed = 0;
+    document.getElementById('speedValue').textContent = Math.floor(speed);
+
+    simTime += 1/60;
+    const h = String(Math.floor(simTime/3600)).padStart(2,'0');
+    const m = String(Math.floor((simTime%3600)/60)).padStart(2,'0');
+    const s = String(Math.floor(simTime%60)).padStart(2,'0');
+    document.getElementById('hudTime').textContent = `${h}:${m}:${s}`;
+
+    if (frame%600===0 && battery>10) {
+        battery--;
+        document.getElementById('batPct').textContent = battery+'%';
+        document.getElementById('batFill').style.width = battery+'%';
+    }
+
+    if (frame%180===0) document.getElementById('aiDecision').textContent = decisions[Math.floor(Math.random()*decisions.length)];
+    if (frame%900===0) document.getElementById('roadInfo').textContent = roads[Math.floor(Math.random()*roads.length)];
+
+    if (frame%30===0) {
+        document.getElementById('dLane').textContent = (97+Math.random()*2.5).toFixed(1)+'%';
+        document.getElementById('dVeh').textContent = (94+Math.random()*4).toFixed(1)+'%';
+        document.getElementById('dPed').textContent = (91+Math.random()*6).toFixed(1)+'%';
+        document.getElementById('dTL').textContent = (98+Math.random()*1.8).toFixed(1)+'%';
+        document.getElementById('dSign').textContent = (97+Math.random()*2.8).toFixed(1)+'%';
+        document.getElementById('lPts').textContent = (1.1+Math.random()*0.3).toFixed(1)+'M';
+        document.getElementById('lAcc').textContent = (99.2+Math.random()*0.7).toFixed(1)+'%';
+        document.getElementById('lRng').textContent = Math.floor(195+Math.random()*10)+'m';
+    }
+
+    if (frame===120) showNotif('AUTOPILOT ENGAGED');
+    if (frame===300) showNotif('LiDAR SYSTEM: 4 SENSORS ONLINE');
+    if (frame===600) showNotif('ALL SYSTEMS NOMINAL');
+    if (frame===900) showNotif('LiDAR + VISION FUSION: CALIBRATED');
+    if (frame%2400===0 && frame>900) {
+        const n = ['LANE KEEPING ACTIVE','LiDAR: POINT CLOUD OPTIMAL','TRAFFIC ANALYSIS UPDATED','SENSOR FUSION NOMINAL','OBSTACLE DETECTION: CLEAR','LiDAR: 3D MAP REFRESHED'];
+        showNotif(n[Math.floor(Math.random()*n.length)]);
+    }
+
+    camShake.x = (Math.random()-0.5)*0.3; camShake.y = (Math.random()-0.5)*0.2;
+}
+
+function showNotif(t) {
+    const el = document.getElementById('notification');
+    el.textContent = t; el.classList.add('show');
+    setTimeout(()=>el.classList.remove('show'), 3000);
+}
+
+function loop() {
+    if (!running) return;
+    frame++;
+    ctx.save(); ctx.translate(camShake.x, camShake.y);
+    ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+
+    roadZ += speed * 0.12;
+    updateTrafficLight();
+
+    drawSky();
+    drawEnv();
+    drawRoad();
+    drawTrafficLights();
+    drawAICars();
+    drawLidarCloud();
+    drawHood();
+
+    ctx.restore();
+    drawLidarMinimap();
+    updateHUD();
+    requestAnimationFrame(loop);
+}
+
+function startSimulation() {
+    document.getElementById('introScreen').classList.add('hidden');
+    setTimeout(() => {
+        document.getElementById('introScreen').style.display = 'none';
+        document.getElementById('hud').classList.add('active');
+        generateRoute();
+        initEnv();
+        running = true;
+        loop();
+    }, 1500);
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowUp') targetSpeed = Math.min(200, targetSpeed + 10);
+    if (e.key === 'ArrowDown') targetSpeed = Math.max(0, targetSpeed - 10);
+    if (e.key === 'l' || e.key === 'L') {
+        lidarOn = !lidarOn;
+        document.getElementById('lidarVal').textContent = lidarOn ? '4x ACTIVE' : 'DISABLED';
+        document.getElementById('lidarVal').style.color = lidarOn ? '#00c8ff' : '#ff4444';
+        showNotif(lidarOn ? 'LiDAR SYSTEM: ENABLED' : 'LiDAR SYSTEM: DISABLED');
+    }
+});
+</script>
+</body>
+</html>
